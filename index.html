@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TIME EXPLORERS: LIFE IN THE PAST</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Nunito', 'sans-serif'],
+                        display: ['Fredoka One', 'cursive'],
+                    },
+                    colors: {
+                        'gate-a': '#ec4899', // Pink
+                        'gate-b': '#22c55e', // Green
+                        'gate-c': '#3b82f6', // Blue
+                        'coin': '#eab308'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; overflow: hidden; background: #87CEEB; touch-action: none; user-select: none; -webkit-user-select: none; }
+        #gameCanvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
+        .screen { display: none; width: 100%; height: 100%; pointer-events: auto; flex-direction: column; align-items: center; justify-content: center; }
+        .screen.active { display: flex; }
+        
+        .btn { cursor: pointer; transition: transform 0.1s, filter 0.1s; pointer-events: auto; }
+        .btn:hover { filter: brightness(1.1); }
+        .btn:active { transform: scale(0.95); }
+
+        .glass-panel { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px); border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border: 4px solid white; }
+        
+        /* HUD Animations */
+        @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
+        .animate-pop { animation: pop 0.3s ease-out; }
+
+        /* Cheerful Animations */
+        @keyframes gradient-bg {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .bg-cheerful {
+            background: linear-gradient(-45deg, #ff9a9e, #fecfef, #a1c4fd, #c2e9fb);
+            background-size: 400% 400%;
+            animation: gradient-bg 5s ease infinite;
+        }
+        @keyframes bounce-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-bounce-slow {
+            animation: bounce-slow 2s infinite ease-in-out;
+        }
+
+        /* Book Styling */
+        .book-cover {
+            background: linear-gradient(45deg, #78350f, #92400e);
+            box-shadow: inset 4px 0 10px rgba(0,0,0,0.5), 10px 10px 20px rgba(0,0,0,0.3);
+            border-left: 12px solid #451a03;
+            border-radius: 4px 16px 16px 4px;
+        }
+        .book-page {
+            background-color: #fef3c7; /* amber-50 */
+            background-image: repeating-linear-gradient(transparent, transparent 31px, #e5e7eb 31px, #e5e7eb 32px);
+            line-height: 32px;
+            box-shadow: inset 20px 0 20px -20px rgba(0,0,0,0.3);
+            border-radius: 2px 12px 12px 2px;
+        }
+    </style>
+</head>
+<body class="text-gray-800 font-sans">
+
+    <!-- 3D Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay -->
+    <div class="ui-layer">
+        
+        <!-- MAIN MENU -->
+        <div id="screen-main" class="screen active bg-black/20">
+            <div class="glass-panel p-8 max-w-md w-full mx-4 flex flex-col items-center text-center">
+                <h1 class="text-5xl font-display text-blue-600 mb-2 drop-shadow-sm">TIME EXPLORERS</h1>
+                <h2 class="text-xl font-bold text-pink-500 mb-6 uppercase tracking-wider">Life in the Past</h2>
+                
+                <input type="text" id="player-name" placeholder="Your Name" class="w-full mb-3 px-4 py-3 rounded-xl border-2 border-gray-300 font-bold focus:border-blue-500 outline-none text-center pointer-events-auto">
+                <input type="text" id="player-class" placeholder="Your Class" class="w-full mb-6 px-4 py-3 rounded-xl border-2 border-gray-300 font-bold focus:border-blue-500 outline-none text-center pointer-events-auto">
+                
+                <button onclick="goToAvatarSelect()" class="btn w-full bg-green-500 text-white font-display text-2xl py-4 rounded-2xl shadow-[0_6px_0_#16a34a] mb-4">START ADVENTURE</button>
+                
+                <div class="flex gap-4 w-full">
+                    <button onclick="showNotes()" class="btn flex-1 bg-yellow-400 text-yellow-900 font-bold py-3 rounded-xl shadow-[0_4px_0_#ca8a04]">📖 Notes</button>
+                    <button onclick="toggleMusic()" class="btn flex-1 bg-purple-500 text-white font-bold py-3 rounded-xl shadow-[0_4px_0_#9333ea]" id="btn-music">🎵 Music: OFF</button>
+                </div>
+                <button onclick="alert('Run through the lanes, dodge obstacles, collect coins! Answer questions by picking the right gate.')" class="btn mt-4 text-gray-500 font-bold underline text-sm">How to Play</button>
+            </div>
+        </div>
+
+        <!-- NOTES SCREEN -->
+        <div id="screen-notes" class="screen bg-black/60">
+            <div class="glass-panel p-6 max-w-lg w-full mx-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-display text-blue-600">Archive Notes</h2>
+                    <button onclick="hideNotes()" class="btn bg-red-500 text-white px-3 py-1 rounded-lg font-bold">X</button>
+                </div>
+                <div class="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                    <div class="bg-blue-50 p-4 rounded-xl border-2 border-blue-200">
+                        <h3 class="font-bold text-lg mb-2">🕰️ Used To</h3>
+                        <p class="mb-2" id="note-text-1">We use "used to" to talk about past habits or things that were true in the past but are not true now. Example: "I used to walk to school."</p>
+                        <button onclick="speak('We use used to to talk about past habits or things that were true in the past but are not true now. Example: I used to walk to school.')" class="btn bg-blue-500 text-white px-3 py-1 rounded-lg text-sm font-bold">🔊 Listen</button>
+                    </div>
+                    <div class="bg-pink-50 p-4 rounded-xl border-2 border-pink-200">
+                        <h3 class="font-bold text-lg mb-2">📻 Life in the Past</h3>
+                        <p class="mb-2" id="note-text-2">In the past, people did not have smartphones or internet. They played traditional games outside, read books, and used oil lamps at night.</p>
+                        <button onclick="speak('In the past, people did not have smartphones or internet. They played traditional games outside, read books, and used oil lamps at night.')" class="btn bg-pink-500 text-white px-3 py-1 rounded-lg text-sm font-bold">🔊 Listen</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AVATAR SELECTION -->
+        <div id="screen-avatar" class="screen bg-black/40">
+            <div class="glass-panel p-8 max-w-md w-full mx-4 text-center">
+                <h2 class="text-3xl font-display text-blue-600 mb-6">Choose Your Explorer</h2>
+                <div class="flex gap-4 justify-center mb-8">
+                    <button onclick="startGameSequence('boy')" class="btn flex-1 bg-blue-100 border-4 border-blue-400 rounded-2xl p-4 flex flex-col items-center hover:bg-blue-200">
+                        <div class="w-16 h-16 bg-blue-500 rounded-full mb-2 border-4 border-white shadow-md flex items-center justify-center text-3xl">👦</div>
+                        <span class="font-bold text-blue-800">Boy</span>
+                    </button>
+                    <button onclick="startGameSequence('girl')" class="btn flex-1 bg-pink-100 border-4 border-pink-400 rounded-2xl p-4 flex flex-col items-center hover:bg-pink-200">
+                        <div class="w-16 h-16 bg-pink-500 rounded-full mb-2 border-4 border-white shadow-md flex items-center justify-center text-3xl">🧕</div>
+                        <span class="font-bold text-pink-800">Girl</span>
+                    </button>
+                </div>
+                <button onclick="switchScreen('main')" class="btn text-gray-500 font-bold underline">Back</button>
+            </div>
+        </div>
+
+        <!-- DIARY SCREEN -->
+        <div id="screen-diary" class="screen bg-black/80 backdrop-blur-md z-50">
+            <div class="w-full max-w-4xl mx-4 flex flex-col items-center relative">
+                
+                <!-- Book Title Container (Cover simulation) -->
+                <div id="diary-cover-view" class="book-cover w-full max-w-sm h-96 flex flex-col items-center justify-center text-center cursor-pointer hover:scale-105 transition-transform duration-300 relative" onclick="openDiaryPages()">
+                    <div class="absolute inset-x-4 inset-y-4 border-2 border-amber-400/50 rounded pointer-events-none"></div>
+                    <h2 class="text-4xl font-display text-amber-200 mb-2 drop-shadow-md px-4">THE LOST DIARIES</h2>
+                    <p class="text-amber-100 font-bold uppercase tracking-widest text-sm mb-6">File 01</p>
+                    <div class="bg-amber-100/20 p-4 rounded-full text-4xl animate-bounce-slow">📖</div>
+                    <p class="text-amber-300 font-bold mt-6">Tap to Open</p>
+                </div>
+
+                <!-- Book Pages View -->
+                <div id="diary-pages-view" class="hidden w-full h-[75vh] max-h-[600px] flex-col relative">
+                    <!-- Top Controls -->
+                    <div class="flex justify-between items-center mb-2 px-2">
+                        <button id="btn-close-diary" onclick="closeDiaryToGame()" class="btn bg-red-500 text-white px-4 py-2 rounded-lg font-bold shadow-md hidden">❌ Back to Game</button>
+                        <button onclick="speakDiaryPage()" class="btn bg-blue-500 text-white px-4 py-2 rounded-lg font-bold shadow-md flex items-center gap-2 ml-auto">🔊 Read Aloud</button>
+                    </div>
+
+                    <!-- Page Content Area -->
+                    <div class="book-page w-full flex-1 p-6 sm:p-10 overflow-y-auto text-lg text-gray-800 relative">
+                        <div id="diary-page-content" class="min-h-[60%]">
+                            <!-- Injected JS Content -->
+                        </div>
+                        
+                        <!-- Navigation -->
+                        <div class="flex justify-between items-center mt-8 pt-4 border-t-2 border-amber-200/50">
+                            <button id="btn-prev-page" onclick="changeDiaryPage(-1)" class="btn bg-amber-200 text-amber-900 px-4 py-2 rounded font-bold shadow invisible">⬅️ Previous</button>
+                            <span id="diary-page-indicator" class="text-amber-700 font-bold text-sm">Page 1 of 4</span>
+                            <button id="btn-next-page" onclick="changeDiaryPage(1)" class="btn bg-amber-200 text-amber-900 px-4 py-2 rounded font-bold shadow">Next ➡️</button>
+                            <button id="btn-start-run" onclick="startRunAfterDiary()" class="btn bg-green-500 text-white px-6 py-3 rounded-xl font-display text-xl shadow-[0_5px_0_#16a34a] hidden animate-pulse">START RUNNING!</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vocabulary Modal -->
+                <div id="vocab-modal" class="absolute inset-0 bg-black/60 flex items-center justify-center hidden z-50 rounded-xl">
+                    <div class="bg-white p-6 rounded-2xl max-w-sm w-11/12 text-center shadow-2xl transform scale-95 border-4 border-blue-400">
+                        <h3 id="vocab-word" class="text-2xl font-bold text-blue-600 mb-2 capitalize">Word</h3>
+                        <p id="vocab-def" class="text-gray-700 text-lg mb-6">Definition goes here.</p>
+                        <button onclick="document.getElementById('vocab-modal').classList.add('hidden')" class="btn bg-blue-500 text-white px-6 py-2 rounded-lg font-bold">Got it!</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- GAME HUD -->
+        <div id="screen-game" class="screen justify-between py-4 px-4 pointer-events-none">
+            <!-- Top Bar -->
+            <div class="w-full max-w-4xl flex justify-between items-start pointer-events-none">
+                <div class="glass-panel px-4 py-2 flex gap-4 items-center">
+                    <div class="text-red-500 font-bold text-xl flex items-center gap-1"><span class="text-2xl">❤️</span> <span id="hud-lives">3</span></div>
+                    <div class="text-yellow-500 font-bold text-xl flex items-center gap-1"><span class="text-2xl">⭐</span> <span id="hud-stars">0</span></div>
+                    <div class="text-yellow-600 font-bold text-xl flex items-center gap-1"><span class="text-2xl">🪙</span> <span id="hud-coins">0</span></div>
+                </div>
+                <div class="glass-panel px-4 py-2 flex flex-col items-end pointer-events-auto">
+                    <div class="text-right mb-2">
+                        <div id="hud-name" class="font-bold text-blue-800">Player</div>
+                        <div id="hud-class" class="text-xs text-gray-500 font-bold">Class</div>
+                    </div>
+                    <button onclick="openDiaryFromGame()" class="btn bg-amber-100 text-amber-900 border-2 border-amber-300 font-bold text-sm px-3 py-1 rounded-lg flex items-center gap-1 shadow-sm">📖 Reopen Diary</button>
+                </div>
+            </div>
+
+            <!-- Question Area (Appears when paused) -->
+            <div id="question-container" class="hidden w-full max-w-2xl bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border-4 border-yellow-400 p-6 text-center pointer-events-auto mt-4 mx-auto relative transform transition-transform duration-300 scale-0">
+                <button onclick="speakQuestion()" class="absolute top-4 right-4 bg-gray-200 hover:bg-gray-300 p-2 rounded-full transition">🔊</button>
+                <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mb-2" id="q-category">Reading Skill</div>
+                <h3 id="q-text" class="text-2xl font-bold text-gray-800 mb-6">Question goes here?</h3>
+                
+                <!-- Answer Buttons (A, B, C) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="answer-buttons">
+                    <button onclick="selectAnswer(0)" class="btn bg-gate-a text-white font-bold p-4 rounded-xl shadow-[0_5px_0_#be185d] text-lg flex items-center justify-center gap-2">
+                        <span class="bg-white/30 px-2 py-1 rounded text-sm">A</span> <span id="ans-0-text">Answer 1</span>
+                    </button>
+                    <button onclick="selectAnswer(1)" class="btn bg-gate-b text-white font-bold p-4 rounded-xl shadow-[0_5px_0_#15803d] text-lg flex items-center justify-center gap-2">
+                        <span class="bg-white/30 px-2 py-1 rounded text-sm">B</span> <span id="ans-1-text">Answer 2</span>
+                    </button>
+                    <button onclick="selectAnswer(2)" class="btn bg-gate-c text-white font-bold p-4 rounded-xl shadow-[0_5px_0_#1d4ed8] text-lg flex items-center justify-center gap-2">
+                        <span class="bg-white/30 px-2 py-1 rounded text-sm">C</span> <span id="ans-2-text">Answer 3</span>
+                    </button>
+                </div>
+                <p class="text-gray-500 font-bold mt-4 text-sm animate-pulse">Select an answer to run through the gate!</p>
+            </div>
+
+            <!-- Mobile Controls -->
+            <div id="mobile-controls" class="w-full max-w-md flex justify-between px-4 mt-auto mb-4 pointer-events-auto">
+                <button onpointerdown="movePlayer(-1); event.preventDefault();" class="btn w-16 h-16 bg-white/50 backdrop-blur rounded-full shadow-lg border-2 border-white flex items-center justify-center text-3xl">⬅️</button>
+                <button onpointerdown="playerJump(); event.preventDefault();" class="btn w-16 h-16 bg-white/50 backdrop-blur rounded-full shadow-lg border-2 border-white flex items-center justify-center text-3xl">⬆️</button>
+                <button onpointerdown="movePlayer(1); event.preventDefault();" class="btn w-16 h-16 bg-white/50 backdrop-blur rounded-full shadow-lg border-2 border-white flex items-center justify-center text-3xl">➡️</button>
+            </div>
+        </div>
+
+        <!-- FEEDBACK SCREEN -->
+        <div id="screen-feedback" class="screen bg-black/60">
+            <div id="feedback-panel" class="glass-panel p-8 max-w-md w-full mx-4 text-center transform transition-transform scale-0">
+                <div id="fb-icon" class="text-6xl mb-4">🎉</div>
+                <h2 id="fb-title" class="text-3xl font-display text-green-600 mb-2">AWESOME!</h2>
+                <div class="bg-gray-100 p-4 rounded-xl mb-6 border border-gray-200">
+                    <p id="fb-full-sentence" class="font-bold text-lg text-gray-800 mb-2">The complete sentence.</p>
+                    <p id="fb-explanation" class="text-sm text-gray-600">Explanation goes here.</p>
+                </div>
+                <button onclick="resumeRun()" class="btn w-full bg-blue-500 text-white font-display text-xl py-3 rounded-xl shadow-[0_5px_0_#1d4ed8]">CONTINUE</button>
+            </div>
+        </div>
+
+        <!-- RESULTS SCREEN -->
+        <div id="screen-results" class="screen bg-cheerful backdrop-blur-sm">
+            <div class="glass-panel p-8 max-w-md w-full mx-4 text-center relative overflow-hidden animate-bounce-slow">
+                <h2 class="text-4xl font-display text-blue-600 mb-2">MISSION COMPLETE!</h2>
+                <h3 class="text-xl font-bold text-pink-500 mb-4 px-2">Congratulations, you did a great job! 🎉</h3>
+                
+                <div class="flex justify-center gap-2 mb-6 text-6xl drop-shadow-md" id="res-stars-display">
+                    ⭐ ⭐ ⭐
+                </div>
+
+                <div class="bg-white/80 rounded-xl p-4 mb-6 border-2 border-blue-100 shadow-sm">
+                    <p class="font-bold text-xl text-blue-900"><span id="res-name-txt">Name</span> (<span id="res-class-txt">Class</span>)</p>
+                    <div class="flex justify-around mt-4">
+                        <div>
+                            <p class="text-xs text-gray-500 font-bold uppercase">Correct Answers</p>
+                            <p class="text-2xl font-black text-green-500" id="res-correct">0/10</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 font-bold uppercase">Score</p>
+                            <p class="text-2xl font-black text-yellow-500" id="res-score">0</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-500 font-bold uppercase">Coins</p>
+                            <p class="text-2xl font-black text-yellow-600" id="res-coins">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <button onclick="location.reload()" class="btn w-full bg-green-500 text-white font-display text-xl py-4 rounded-xl shadow-[0_5px_0_#16a34a] hover:bg-green-400">PLAY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /**
+         * STATE & DATA
+         */
+        const state = {
+            mode: 'MENU', // MENU, RUN, PAUSE_QUESTION, FEEDBACK, GAME_OVER, DIARY
+            savedMode: 'RUN', // To remember what to return to when closing diary
+            savedSpeed: 0,
+            name: '',
+            cls: '',
+            avatar: 'boy',
+            lives: 3,
+            stars: 0,
+            coins: 0,
+            correctCount: 0,
+            questionIndex: 0,
+            speed: 0,
+            baseSpeed: 25,
+            targetLane: 1, // 0: left, 1: center, 2: right
+            currentLane: 1,
+            isJumping: false,
+            jumpVelocity: 0,
+            distance: 0,
+            nextQuestionDist: 150,
+            music: false,
+            tts: window.speechSynthesis
+        };
+
+        let isAudioInitialized = false;
+        let coinSynth;
+        
+        async function initAudio() {
+            if (isAudioInitialized) return;
+            await Tone.start();
+            
+            // DING Sound for coins
+            coinSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: 'sine' },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 }
+            }).toDestination();
+            coinSynth.volume.value = -5;
+
+            // Slow Energetic Background Music
+            const bassSynth = new Tone.FMSynth({
+                modulationIndex: 12,
+                envelope: { attack: 0.01, decay: 0.2 },
+                modulation: { type: 'square' },
+                modulationEnvelope: { attack: 0.1, decay: 0.01 }
+            }).toDestination();
+            bassSynth.volume.value = -16;
+
+            const arpSynth = new Tone.Synth({
+                oscillator: { type: 'triangle' },
+                envelope: { attack: 0.05, decay: 0.1, sustain: 0.1, release: 0.5 }
+            }).toDestination();
+            arpSynth.volume.value = -20;
+
+            const bassPattern = ["C3", "C4", "C3", "C4", "F2", "F3", "G2", "G3"];
+            const arpPattern = ["C5", "E5", "G5", "E5", "F5", "A5", "C6", "A5"];
+            
+            let step = 0;
+            Tone.Transport.scheduleRepeat((time) => {
+                if (state.mode === 'RUN' || state.mode === 'ANSWER_RUN') {
+                    let bassNote = bassPattern[step % bassPattern.length];
+                    let arpNote = arpPattern[step % arpPattern.length];
+                    
+                    bassSynth.triggerAttackRelease(bassNote, "8n", time);
+                    if (step % 2 === 0) arpSynth.triggerAttackRelease(arpNote, "16n", time);
+                }
+                step++;
+            }, "8n");
+            
+            Tone.Transport.bpm.value = 110;
+            isAudioInitialized = true;
+        }
+
+        function playCoinSound() {
+            if (state.music && coinSynth) {
+                try {
+                    coinSynth.triggerAttackRelease("B5", "16n", Tone.now());
+                } catch (e) {
+                    console.warn("Audio scheduling overlap prevented", e);
+                }
+            }
+        }
+
+        let currentQuestion = null;
+        let shuffledChoices = [];
+
+        /**
+         * UI FUNCTIONS
+         */
+        function switchScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('screen-' + id).classList.add('active');
+        }
+
+        function showNotes() { switchScreen('notes'); }
+        function hideNotes() { 
+            if(state.tts) state.tts.cancel();
+            switchScreen('main'); 
+        }
+        
+        function toggleMusic() {
+            state.music = !state.music;
+            document.getElementById('btn-music').innerText = state.music ? "🎵 Music: ON" : "🎵 Music: OFF";
+            if(state.music) {
+                initAudio().then(() => Tone.Transport.start());
+            } else {
+                Tone.Transport.stop();
+            }
+        }
+
+        function speak(text) {
+            if (!state.tts) return;
+            state.tts.cancel();
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'en-GB';
+            state.tts.speak(u);
+        }
+
+        function speakQuestion() {
+            if(currentQuestion) {
+                let text = currentQuestion.q.replace('_____', 'blank') + ". Options: A, " + shuffledChoices[0].t + ". B, " + shuffledChoices[1].t + ". C, " + shuffledChoices[2].t;
+                speak(text);
+            }
+        }
+
+        function goToAvatarSelect() {
+            const n = document.getElementById('player-name').value.trim();
+            const c = document.getElementById('player-class').value.trim();
+            if(!n || !c) { alert("Please enter Name and Class!"); return; }
+            state.name = n;
+            state.cls = c;
+            switchScreen('avatar');
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-lives').innerText = state.lives;
+            document.getElementById('hud-stars').innerText = state.stars;
+            document.getElementById('hud-coins').innerText = state.coins;
+        }
+
+        function animateHUD(id) {
+            const el = document.getElementById(id);
+            el.parentElement.classList.remove('animate-pop');
+            void el.parentElement.offsetWidth;
+            el.parentElement.classList.add('animate-pop');
+        }
+
+        const questions = [
+            {
+                q: "Who was Aisyah's best friend?",
+                choices: ["Salmah", "Siti", "Aminah"],
+                ans: 0,
+                exp: "The diary says: 'I used to walk to school with my best friend, Salmah.'"
+            },
+            {
+                q: "Aisyah _____ walk to school.",
+                choices: ["used to", "using to", "use to"],
+                ans: 0,
+                exp: "'Used to' describes a past habit that doesn't happen anymore."
+            },
+            {
+                q: "What happened to Salmah's schoolbag?",
+                choices: ["Fell in mud", "Left at home", "Stolen by monkey"],
+                ans: 0,
+                exp: "She dropped her schoolbag into the muddy water."
+            },
+            {
+                q: "What does 'slippery' mean?",
+                choices: ["Hard to walk on", "Very dry", "Easy to run on"],
+                ans: 0,
+                exp: "'Slippery' means difficult to walk on safely without sliding."
+            },
+            {
+                q: "How did Salmah probably feel when dropping her bag?",
+                choices: ["Shocked", "Happy", "Bored"],
+                ans: 0,
+                exp: "She stood 'frozen' staring at her books, showing she was shocked or frightened."
+            },
+            {
+                q: "Choose the correct question:",
+                choices: ["Did she use to", "Did she used to", "Does she used to"],
+                ans: 0,
+                exp: "After the helping verb 'did', we use the base form 'use to'."
+            },
+            {
+                q: "Which action shows Aisyah was a caring friend?",
+                choices: ["Helped her", "Laughed at her", "Ran away"],
+                ans: 0,
+                exp: "Aisyah quickly held her hand and helped her move to a safer place."
+            },
+            {
+                q: "What is the noun for the verb 'teach'?",
+                choices: ["Teacher", "Teaching", "Taught"],
+                ans: 0,
+                exp: "A 'teacher' is a person who teaches."
+            },
+            {
+                q: "What should we look for when making an inference?",
+                choices: ["Clues in text", "Only pictures", "Long words"],
+                ans: 0,
+                exp: "An inference is drawn by looking at clues and evidence from the text."
+            },
+            {
+                q: "What is the main message of the diary?",
+                choices: ["Help each other", "Don't walk in rain", "Buy waterproof bags"],
+                ans: 0,
+                exp: "Aisyah learnt that a difficult morning becomes a wonderful memory when people help one another."
+            }
+        ];
+
+        // Shuffle questions
+        questions.sort(() => Math.random() - 0.5);
+
+        /**
+         * DIARY LOGIC
+         */
+        const diaryContent = [
+            {
+                html: "<h2 class='text-3xl font-display text-amber-900 mb-2'>The Day the Rain Changed Everything</h2><p class='font-bold text-gray-500 mb-6'>18 August 1975</p><p class='mb-4'>Dear Diary,</p><p class='mb-4'>Today was a day I will never forget!</p><p class='mb-4'>When I was younger, I <span class='text-blue-600 font-bold cursor-pointer underline' onclick='showVocab(\"used to\")'>used to</span> walk to school with my best friend, Salmah. We lived in a small village where there were no school buses. Every morning, we crossed a wooden bridge and walked past the paddy fields.</p>",
+                speakText: "The Day the Rain Changed Everything. 18 August 1975. Dear Diary, Today was a day I will never forget! When I was younger, I used to walk to school with my best friend, Salmah. We lived in a small village where there were no school buses. Every morning, we crossed a wooden bridge and walked past the paddy fields."
+            },
+            {
+                html: "<p class='mb-4'>This morning, dark clouds covered the sky. Salmah looked worried, but I told her we would reach school before the rain started. Unfortunately, I was wrong!</p><p class='mb-4'>Halfway across the bridge, heavy rain began to fall. The wooden boards became <span class='text-blue-600 font-bold cursor-pointer underline' onclick='showVocab(\"slippery\")'>slippery</span>. Suddenly, Salmah dropped her schoolbag into the muddy water. She stood <span class='text-blue-600 font-bold cursor-pointer underline' onclick='showVocab(\"frozen\")'>frozen</span>, staring at her floating books.</p>",
+                speakText: "This morning, dark clouds covered the sky. Salmah looked worried, but I told her we would reach school before the rain started. Unfortunately, I was wrong! Halfway across the bridge, heavy rain began to fall. The wooden boards became slippery. Suddenly, Salmah dropped her schoolbag into the muddy water. She stood frozen, staring at her floating books."
+            },
+            {
+                html: "<p class='mb-4'>I quickly held her hand and helped her move to a safer place. Then, a farmer nearby noticed us. He used a long bamboo stick to pull the schoolbag out of the water. Salmah looked <span class='text-blue-600 font-bold cursor-pointer underline' onclick='showVocab(\"relieved\")'>relieved</span>, although some of her books were completely wet.</p><p class='mb-4'>We finally arrived at school twenty minutes late. Our teacher, Mrs Tan, listened to our story. Instead of <span class='text-blue-600 font-bold cursor-pointer underline' onclick='showVocab(\"scolding\")'>scolding</span> us, she gave us dry towels and helped us place the wet books near an open window.</p>",
+                speakText: "I quickly held her hand and helped her move to a safer place. Then, a farmer nearby noticed us. He used a long bamboo stick to pull the schoolbag out of the water. Salmah looked relieved, although some of her books were completely wet. We finally arrived at school twenty minutes late. Our teacher, Mrs Tan, listened to our story. Instead of scolding us, she gave us dry towels and helped us place the wet books near an open window."
+            },
+            {
+                html: "<p class='mb-4'>I learnt something important today. A difficult morning can become a wonderful memory when people help one another.</p><p class='mb-4'>I hope Salmah and I will laugh about this adventure someday!</p><p class='mb-4'>Goodnight, Diary.</p><p class='italic mt-8 text-right font-bold text-xl'>— Aisyah</p>",
+                speakText: "I learnt something important today. A difficult morning can become a wonderful memory when people help one another. I hope Salmah and I will laugh about this adventure someday! Goodnight, Diary. Aisyah."
+            }
+        ];
+
+        const vocabDefs = {
+            "slippery": "Difficult to walk on safely.",
+            "frozen": "Unable to move because of shock or fear (in this context).",
+            "relieved": "Feeling better because something worrying has ended.",
+            "scolding": "Speaking angrily to someone about something they did wrong.",
+            "used to": "Describes a past habit or situation that is no longer true."
+        };
+
+        let diaryPageIdx = 0;
+        let isFirstTimeDiary = true;
+
+        function showVocab(word) {
+            document.getElementById('vocab-word').innerText = word;
+            document.getElementById('vocab-def').innerText = vocabDefs[word];
+            document.getElementById('vocab-modal').classList.remove('hidden');
+        }
+
+        function renderDiaryPage() {
+            document.getElementById('diary-page-content').innerHTML = diaryContent[diaryPageIdx].html;
+            document.getElementById('diary-page-indicator').innerText = `Page ${diaryPageIdx + 1} of ${diaryContent.length}`;
+            
+            const btnPrev = document.getElementById('btn-prev-page');
+            const btnNext = document.getElementById('btn-next-page');
+            const btnStart = document.getElementById('btn-start-run');
+            const btnClose = document.getElementById('btn-close-diary');
+
+            btnPrev.classList.toggle('invisible', diaryPageIdx === 0);
+            
+            if (diaryPageIdx === diaryContent.length - 1) {
+                btnNext.classList.add('hidden');
+                if(isFirstTimeDiary) {
+                    btnStart.classList.remove('hidden');
+                    btnClose.classList.add('hidden');
+                } else {
+                    btnStart.classList.add('hidden');
+                    btnClose.classList.remove('hidden');
+                }
+            } else {
+                btnNext.classList.remove('hidden');
+                btnStart.classList.add('hidden');
+                if(!isFirstTimeDiary) {
+                    btnClose.classList.remove('hidden');
+                }
+            }
+        }
+
+        function changeDiaryPage(dir) {
+            if(state.tts) state.tts.cancel();
+            diaryPageIdx += dir;
+            if (diaryPageIdx < 0) diaryPageIdx = 0;
+            if (diaryPageIdx >= diaryContent.length) diaryPageIdx = diaryContent.length - 1;
+            renderDiaryPage();
+        }
+
+        function speakDiaryPage() {
+            speak(diaryContent[diaryPageIdx].speakText);
+        }
+
+        function openDiaryPages() {
+            document.getElementById('diary-cover-view').classList.add('hidden');
+            document.getElementById('diary-pages-view').classList.remove('hidden');
+            document.getElementById('diary-pages-view').classList.add('flex');
+            diaryPageIdx = 0;
+            renderDiaryPage();
+        }
+
+        function showDiaryPreGame() {
+            isFirstTimeDiary = true;
+            document.getElementById('diary-cover-view').classList.remove('hidden');
+            document.getElementById('diary-pages-view').classList.add('hidden');
+            document.getElementById('diary-pages-view').classList.remove('flex');
+            switchScreen('diary');
+        }
+
+        function startRunAfterDiary() {
+            if(state.tts) state.tts.cancel();
+            isFirstTimeDiary = false;
+            startGame(); 
+        }
+
+        function openDiaryFromGame() {
+            if(state.mode === 'GAME_OVER' || state.mode === 'MENU' || state.mode === 'DIARY') return;
+            if(state.tts) state.tts.cancel();
+            
+            state.savedMode = state.mode;
+            state.savedSpeed = state.speed;
+            state.mode = 'DIARY';
+            state.speed = 0;
+            
+            isFirstTimeDiary = false;
+            document.getElementById('diary-cover-view').classList.add('hidden');
+            document.getElementById('diary-pages-view').classList.remove('hidden');
+            document.getElementById('diary-pages-view').classList.add('flex');
+            diaryPageIdx = 0;
+            renderDiaryPage();
+            
+            switchScreen('diary');
+        }
+
+        function closeDiaryToGame() {
+            if(state.tts) state.tts.cancel();
+            document.getElementById('vocab-modal').classList.add('hidden');
+            state.mode = state.savedMode;
+            state.speed = state.savedSpeed;
+            switchScreen('game');
+        }
+
+        /**
+         * THREE.JS INIT & SCENE
+         */
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); 
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+        
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+
+        // Lighting
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+        // Materials
+        const gateMats = [
+            new THREE.MeshStandardMaterial({color: 0xec4899}), // Pink
+            new THREE.MeshStandardMaterial({color: 0x22c55e}), // Green
+            new THREE.MeshStandardMaterial({color: 0x3b82f6})  // Blue
+        ];
+        
+        // Build Tracks
+        const trackGroup = new THREE.Group();
+        scene.add(trackGroup);
+        
+        // Ground
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(400, 400),
+            new THREE.MeshStandardMaterial({ color: 0x93c5fd }) 
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.1;
+        ground.receiveShadow = true;
+        trackGroup.add(ground);
+
+        // 3 Rails
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x52525b }); 
+        const sleeperMat = new THREE.MeshStandardMaterial({ color: 0x78350f }); 
+        const curbMat1 = new THREE.MeshStandardMaterial({ color: 0xff0000 }); 
+        const curbMat2 = new THREE.MeshStandardMaterial({ color: 0xffffff }); 
+
+        [-3, 0, 3].forEach(x => {
+            for(let i=0; i<50; i++) {
+                const sl = new THREE.Mesh(new THREE.BoxGeometry(2, 0.1, 0.4), sleeperMat);
+                sl.position.set(x, 0, i * 4 - 100);
+                sl.receiveShadow = true;
+                trackGroup.add(sl);
+            }
+            const leftRail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 400), railMat);
+            leftRail.position.set(x - 0.7, 0.08, 0);
+            trackGroup.add(leftRail);
+            const rightRail = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 400), railMat);
+            rightRail.position.set(x + 0.7, 0.08, 0);
+            trackGroup.add(rightRail);
+        });
+
+        // Curbs (Red/White)
+        for(let i=0; i<100; i++) {
+            const mat = i % 2 === 0 ? curbMat1 : curbMat2;
+            const curbL = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 4), mat);
+            curbL.position.set(-5, 0.15, i * 4 - 100);
+            trackGroup.add(curbL);
+            
+            const curbR = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 4), mat);
+            curbR.position.set(5, 0.15, i * 4 - 100);
+            trackGroup.add(curbR);
+        }
+
+        // World Arrays
+        let envObjects = [];
+        let obstacles = [];
+        let coins = [];
+        let gates = [];
+        
+        // Character Container
+        const playerGroup = new THREE.Group();
+        scene.add(playerGroup);
+        let limbs = { lArm: null, rArm: null, lLeg: null, rLeg: null };
+
+        const petGroup = new THREE.Group();
+        scene.add(petGroup);
+
+        function createLimb(x, y, mat) {
+            const pivot = new THREE.Group();
+            pivot.position.set(x, y, 0);
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.8, 16), mat);
+            mesh.position.y = -0.4; 
+            pivot.add(mesh);
+            playerGroup.add(pivot);
+            return pivot;
+        }
+
+        function buildCharacter(type) {
+            while(playerGroup.children.length > 0) playerGroup.remove(playerGroup.children[0]);
+            while(petGroup.children.length > 0) petGroup.remove(petGroup.children[0]);
+
+            const isBoy = type === 'boy';
+            const skinColor = 0xffe0bd;
+            const bodyColor = isBoy ? 0x3b82f6 : 0xf472b6; 
+
+            // Body
+            const bodyGeo = new THREE.CylinderGeometry(0.45, 0.5, 1.1, 32);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: bodyColor });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.6;
+            body.castShadow = true;
+            playerGroup.add(body);
+
+            // Head
+            const headGeo = new THREE.SphereGeometry(0.65, 32, 32);
+            const headMat = new THREE.MeshStandardMaterial({ color: skinColor });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.7;
+            head.castShadow = true;
+            playerGroup.add(head);
+
+            // Accessories
+            if (isBoy) {
+                const capGeo = new THREE.SphereGeometry(0.66, 32, 32, 0, Math.PI*2, 0, Math.PI*0.5);
+                const capMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6 }); 
+                const cap = new THREE.Mesh(capGeo, capMat);
+                cap.position.y = 2.72;
+                const visor = new THREE.BoxGeometry(0.8, 0.1, 0.5);
+                const vis = new THREE.Mesh(visor, capMat);
+                vis.position.set(0, -0.05, 0.5);
+                cap.add(vis);
+                playerGroup.add(cap);
+            } else {
+                const hijabGeo = new THREE.SphereGeometry(0.68, 32, 32, 0, Math.PI*2, 0, Math.PI*0.8);
+                const hijabMat = new THREE.MeshStandardMaterial({ color: 0xffffff }); 
+                const hijab = new THREE.Mesh(hijabGeo, hijabMat);
+                hijab.position.y = 2.7;
+                playerGroup.add(hijab);
+            }
+
+            // Backpack 
+            const packGeo = new THREE.BoxGeometry(0.7, 0.8, 0.3);
+            const packMat = new THREE.MeshStandardMaterial({ color: 0xa855f7 });
+            const pack = new THREE.Mesh(packGeo, packMat);
+            pack.position.set(0, 1.6, -0.6);
+            
+            // Gold Star
+            const starShape = new THREE.Shape();
+            for(let i = 0; i < 10; i++) {
+                const r = i % 2 === 0 ? 0.2 : 0.1;
+                const a = (i * Math.PI) / 5;
+                if(i === 0) starShape.moveTo(Math.sin(a)*r, Math.cos(a)*r);
+                else starShape.lineTo(Math.sin(a)*r, Math.cos(a)*r);
+            }
+            const starGeo = new THREE.ExtrudeGeometry(starShape, {depth: 0.05, bevelEnabled: false});
+            const starMat = new THREE.MeshStandardMaterial({ color: 0xfacc15 });
+            const star = new THREE.Mesh(starGeo, starMat);
+            star.rotation.z = Math.PI; 
+            star.position.set(0, 0, -0.17);
+            pack.add(star);
+            playerGroup.add(pack);
+
+            // Limbs
+            const armMat = new THREE.MeshStandardMaterial({ color: bodyColor });
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x1e3a8a }); 
+            
+            limbs.lArm = createLimb(-0.65, 2.0, armMat); 
+            limbs.rArm = createLimb(0.65, 2.0, armMat); 
+            limbs.lLeg = createLimb(-0.25, 1.1, legMat); 
+            limbs.rLeg = createLimb(0.25, 1.1, legMat); 
+
+            // Pet 
+            const petBody = new THREE.SphereGeometry(0.4, 32, 32);
+            const petMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b }); 
+            const pMesh = new THREE.Mesh(petBody, petMat);
+            pMesh.position.y = 0.4;
+            pMesh.castShadow = true;
+            
+            // Pet ears
+            const earGeo = new THREE.ConeGeometry(0.15, 0.3, 16);
+            const earL = new THREE.Mesh(earGeo, petMat);
+            earL.position.set(-0.2, 0.8, 0);
+            const earR = new THREE.Mesh(earGeo, petMat);
+            earR.position.set(0.2, 0.8, 0);
+            pMesh.add(earL, earR);
+            petGroup.add(pMesh);
+        }
+
+        // Environment Generators
+        function spawnEnvironment(z) {
+            const group = new THREE.Group();
+            group.position.z = z;
+            
+            // Houses
+            const houseGeo = new THREE.BoxGeometry(4, 4, 4);
+            const houseMat = new THREE.MeshStandardMaterial({color: Math.random() > 0.5 ? 0xfef08a : 0xfbcfe8});
+            const roofGeo = new THREE.ConeGeometry(3.5, 2, 4);
+            const roofMat = new THREE.MeshStandardMaterial({color: 0xf87171});
+            
+            const houseL = new THREE.Mesh(houseGeo, houseMat);
+            houseL.position.set(-10, 2, 0);
+            const roofL = new THREE.Mesh(roofGeo, roofMat);
+            roofL.position.set(-10, 5, 0);
+            roofL.rotation.y = Math.PI / 4;
+            group.add(houseL, roofL);
+            
+            const houseR = new THREE.Mesh(houseGeo, houseMat);
+            houseR.position.set(10, 2, 0);
+            const roofR = new THREE.Mesh(roofGeo, roofMat);
+            roofR.position.set(10, 5, 0);
+            roofR.rotation.y = Math.PI / 4;
+            group.add(houseR, roofR);
+            
+            // Trees
+            const trunkGeo = new THREE.CylinderGeometry(0.4, 0.4, 2);
+            const trunkMat = new THREE.MeshStandardMaterial({color: 0x78350f});
+            const leavesGeo = new THREE.DodecahedronGeometry(2);
+            const leavesMat = new THREE.MeshStandardMaterial({color: 0x4ade80});
+            
+            const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+            trunk.position.set(-7, 1, 10);
+            const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+            leaves.position.set(-7, 3, 10);
+            group.add(trunk, leaves);
+            
+            // Lamps
+            const lampGeo = new THREE.CylinderGeometry(0.1, 0.1, 5);
+            const lampMat = new THREE.MeshStandardMaterial({color: 0x374151});
+            const bulbGeo = new THREE.SphereGeometry(0.5);
+            const bulbMat = new THREE.MeshBasicMaterial({color: 0xfffbeb});
+            
+            const lampL = new THREE.Mesh(lampGeo, lampMat);
+            lampL.position.set(-6, 2.5, -10);
+            const bulbL = new THREE.Mesh(bulbGeo, bulbMat);
+            bulbL.position.set(-6, 5, -10);
+            group.add(lampL, bulbL);
+            
+            const lampR = new THREE.Mesh(lampGeo, lampMat);
+            lampR.position.set(6, 2.5, -10);
+            const bulbR = new THREE.Mesh(bulbGeo, bulbMat);
+            bulbR.position.set(6, 5, -10);
+            group.add(lampR, bulbR);
+            
+            scene.add(group);
+            envObjects.push({chunk: group});
+        }
+
+        for(let i=0; i<5; i++) {
+            spawnEnvironment(i * -40);
+        }
+
+        function spawnObstacle() {
+            if(state.mode !== 'RUN') return;
+            
+            // Spawn 1 or 2 obstacles, usually 1 to keep it less cluttered
+            const numObstacles = Math.random() > 0.75 ? 2 : 1; 
+            const lanes = [0, 1, 2].sort(() => Math.random() - 0.5); // Shuffle lanes
+            
+            for(let i = 0; i < numObstacles; i++) {
+                const lane = lanes[i];
+                const x = (lane - 1) * 3;
+                
+                const isBarrier = Math.random() > 0.5;
+                let obsMesh;
+                
+                if (isBarrier) {
+                    // Low Jumpable Barrier (Red & White Hurdle)
+                    obsMesh = new THREE.Group();
+                    const bar = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.5, 0.3), new THREE.MeshStandardMaterial({color: 0xef4444})); // Red
+                    bar.position.y = 0.6;
+                    const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.21, 0.2, 0.31), new THREE.MeshStandardMaterial({color: 0xffffff})); // White Stripe
+                    stripe.position.y = 0.6;
+                    
+                    const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.8);
+                    const legMat = new THREE.MeshStandardMaterial({color: 0x9ca3af});
+                    const legL = new THREE.Mesh(legGeo, legMat); legL.position.set(-1, 0.4, 0);
+                    const legR = new THREE.Mesh(legGeo, legMat); legR.position.set(1, 0.4, 0);
+                    
+                    obsMesh.add(bar, stripe, legL, legR);
+                    obsMesh.position.set(x, 0, -100);
+                    obsMesh.userData = { hitHeight: 0.8 }; // Player clears it if Y > 0.8
+                } else {
+                    // Tall Block / Train Car (Must Dodge)
+                    obsMesh = new THREE.Group();
+                    const block = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.5, 4), new THREE.MeshStandardMaterial({color: 0x0ea5e9})); // Blue block
+                    block.position.y = 1.25;
+                    const outline = new THREE.Mesh(new THREE.BoxGeometry(2.3, 2.6, 4.1), new THREE.MeshBasicMaterial({color: 0x0284c7, wireframe: true}));
+                    outline.position.y = 1.25;
+                    
+                    obsMesh.add(block, outline);
+                    obsMesh.position.set(x, 0, -100);
+                    obsMesh.userData = { hitHeight: 2.5 }; // Too high to reliably jump
+                }
+                
+                scene.add(obsMesh);
+                obstacles.push(obsMesh);
+            }
+        }
+
+        function spawnCoin() {
+            if(state.mode !== 'RUN') return;
+            const lane = Math.floor(Math.random() * 3);
+            const x = (lane - 1) * 3;
+            const isHigh = Math.random() > 0.5;
+            
+            const coinGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.2, 16);
+            const coinMat = new THREE.MeshStandardMaterial({color: 0xfacc15, metalness: 0.8, roughness: 0.2});
+            const coin = new THREE.Mesh(coinGeo, coinMat);
+            coin.rotation.x = Math.PI / 2;
+            coin.position.set(x, isHigh ? 3 : 1, -100);
+            scene.add(coin);
+            coins.push(coin);
+        }
+
+        /**
+         * GAME LOGIC
+         */
+        function startGameSequence(avatarType) {
+            state.avatar = avatarType;
+            buildCharacter(avatarType);
+            
+            initAudio().then(() => {
+                if(state.music) Tone.Transport.start();
+            });
+            
+            showDiaryPreGame();
+        }
+
+        function startGame() {
+            document.getElementById('hud-name').innerText = state.name;
+            document.getElementById('hud-class').innerText = state.cls;
+            updateHUD();
+
+            switchScreen('game');
+            state.mode = 'RUN';
+            state.speed = state.baseSpeed;
+            
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 1, 0);
+        }
+
+        // Controls
+        function movePlayer(dir) {
+            if(state.mode !== 'RUN' && state.mode !== 'PAUSE_QUESTION') return;
+            state.targetLane += dir;
+            if(state.targetLane < 0) state.targetLane = 0;
+            if(state.targetLane > 2) state.targetLane = 2;
+        }
+
+        function playerJump() {
+            if(state.mode !== 'RUN') return;
+            if(!state.isJumping) {
+                state.isJumping = true;
+                state.jumpVelocity = 0.45;
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a') movePlayer(-1);
+            if (e.key === 'ArrowRight' || e.key === 'd') movePlayer(1);
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === ' ') playerJump();
+        });
+
+        // Touch/Swipe Controls for better mobile sensitivity
+        let touchStartX = 0;
+        let touchStartY = 0;
+        window.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, {passive: true});
+        
+        window.addEventListener('touchend', e => {
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+            let dx = touchEndX - touchStartX;
+            let dy = touchEndY - touchStartY;
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
+                if (dx > 0) movePlayer(1);
+                else movePlayer(-1);
+            } else if (dy < -30) {
+                playerJump();
+            }
+        }, {passive: true});
+
+        // Questions
+        function spawnGates() {
+            state.mode = 'APPROACHING_QUESTION';
+            
+            currentQuestion = questions[state.questionIndex];
+            shuffledChoices = currentQuestion.choices.map((t, i) => ({t, idx: i})).sort(() => Math.random() - 0.5);
+            
+            const poleMat = new THREE.MeshStandardMaterial({color: 0x9ca3af});
+            
+            for(let i=0; i<3; i++) {
+                const group = new THREE.Group();
+                group.position.set((i-1)*3, 0, -60);
+                
+                const leftPole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4), poleMat);
+                leftPole.position.set(-1.4, 2, 0);
+                const rightPole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4), poleMat);
+                rightPole.position.set(1.4, 2, 0);
+                
+                const sign = new THREE.Mesh(new THREE.BoxGeometry(3.0, 1.2, 0.2), gateMats[i]);
+                sign.position.set(0, 3.5, 0);
+                sign.castShadow = true;
+                
+                const hitBox = new THREE.Mesh(new THREE.PlaneGeometry(2, 4), new THREE.MeshBasicMaterial({visible:false}));
+                hitBox.position.set(0, 2, 0.25);
+                hitBox.userData = { choiceIndex: i, isCorrect: (shuffledChoices[i].idx === currentQuestion.ans) };
+
+                group.add(leftPole, rightPole, sign, hitBox);
+                scene.add(group);
+                gates.push(group);
+            }
+        }
+
+        function triggerQuestionPause() {
+            state.mode = 'PAUSE_QUESTION';
+            state.speed = 0;
+            
+            const qC = document.getElementById('question-container');
+            qC.classList.remove('hidden');
+            setTimeout(() => { qC.classList.remove('scale-0'); qC.classList.add('scale-100'); }, 50);
+            
+            document.getElementById('q-text').innerText = currentQuestion.q;
+            
+            for(let i=0; i<3; i++) {
+                document.getElementById(`ans-${i}-text`).innerText = shuffledChoices[i].t;
+            }
+            speakQuestion();
+        }
+
+        function selectAnswer(index) {
+            state.targetLane = index;
+            
+            const qC = document.getElementById('question-container');
+            qC.classList.remove('scale-100'); qC.classList.add('scale-0');
+            setTimeout(() => qC.classList.add('hidden'), 300);
+
+            state.mode = 'ANSWER_RUN';
+            state.speed = state.baseSpeed;
+        }
+
+        function checkGateCollision(hitBox) {
+            const isCorrect = hitBox.userData.isCorrect;
+            state.mode = 'FEEDBACK';
+            state.speed = 0;
+            
+            gates.forEach(g => scene.remove(g));
+            gates = [];
+
+            if(isCorrect) {
+                state.stars += 10;
+                state.correctCount++;
+                animateHUD('hud-stars');
+            } else {
+                state.lives -= 1;
+                animateHUD('hud-lives');
+            }
+            updateHUD();
+
+            const fbPanel = document.getElementById('feedback-panel');
+            document.getElementById('fb-icon').innerText = isCorrect ? "🎉" : "💔";
+            document.getElementById('fb-title').innerText = isCorrect ? "AWESOME! CORRECT!" : "OOPS! INCORRECT!";
+            document.getElementById('fb-title').className = `text-3xl font-display mb-2 ${isCorrect ? 'text-green-600' : 'text-red-600'}`;
+            
+            const correctText = currentQuestion.choices[currentQuestion.ans];
+            document.getElementById('fb-full-sentence').innerHTML = currentQuestion.q.replace('_____', `<span class="text-blue-600 underline">${correctText}</span>`);
+            document.getElementById('fb-explanation').innerText = currentQuestion.exp;
+
+            switchScreen('feedback');
+            setTimeout(() => fbPanel.classList.replace('scale-0', 'scale-100'), 50);
+            
+            speak(isCorrect ? "Correct! " + currentQuestion.exp : "Incorrect! " + currentQuestion.exp);
+
+            if(state.lives <= 0) {
+                setTimeout(showResults, 3000);
+            }
+        }
+
+        function resumeRun() {
+            if(state.lives <= 0) return;
+            state.questionIndex++;
+            if(state.questionIndex >= questions.length) {
+                showResults();
+                return;
+            }
+
+            state.nextQuestionDist += 150;
+            
+            const fbPanel = document.getElementById('feedback-panel');
+            fbPanel.classList.replace('scale-100', 'scale-0');
+            setTimeout(() => switchScreen('game'), 300);
+            
+            state.mode = 'RUN';
+            state.speed = state.baseSpeed;
+        }
+
+        function showResults() {
+            state.mode = 'GAME_OVER';
+            state.speed = 0;
+            switchScreen('results');
+            
+            document.getElementById('res-name-txt').innerText = state.name;
+            document.getElementById('res-class-txt').innerText = state.cls;
+            document.getElementById('res-score').innerText = state.stars;
+            document.getElementById('res-coins').innerText = state.coins;
+            document.getElementById('res-correct').innerText = `${state.correctCount}/10`;
+
+            let earnedStars = 0;
+            if (state.correctCount >= 9) earnedStars = 3;       
+            else if (state.correctCount >= 5) earnedStars = 2;  
+            else if (state.correctCount >= 1) earnedStars = 1;  
+
+            let starHTML = "";
+            for(let i=0; i<3; i++) {
+                if (i < earnedStars) {
+                    starHTML += "⭐ ";
+                } else {
+                    starHTML += "<span style='filter: grayscale(100%) opacity(30%);'>⭐</span> ";
+                }
+            }
+            document.getElementById('res-stars-display').innerHTML = starHTML;
+        }
+
+        let clock = new THREE.Clock();
+        let spawnTimer = 0;
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            const time = clock.getElapsedTime();
+            
+            if(state.mode === 'RUN' || state.mode === 'ANSWER_RUN' || state.mode === 'APPROACHING_QUESTION') {
+                const runSpeed = 15;
+                const runCycle = Math.sin(time * runSpeed);
+                if(limbs.lArm) limbs.lArm.rotation.x = runCycle * 0.8;
+                if(limbs.rArm) limbs.rArm.rotation.x = -runCycle * 0.8;
+                if(limbs.lLeg) limbs.lLeg.rotation.x = -runCycle * 0.8;
+                if(limbs.rLeg) limbs.rLeg.rotation.x = runCycle * 0.8;
+                
+                petGroup.position.y = Math.abs(Math.sin(time * 15)) * 0.5;
+            } else if (state.mode === 'PAUSE_QUESTION') {
+                const runCycle = Math.sin(time * 10);
+                if(limbs.lArm) limbs.lArm.rotation.x = runCycle * 0.3;
+            }
+
+            if(playerGroup) {
+                const targetX = (state.targetLane - 1) * 3;
+                playerGroup.position.x += (targetX - playerGroup.position.x) * 25 * dt;
+                
+                if (state.isJumping) {
+                    playerGroup.position.y += state.jumpVelocity;
+                    state.jumpVelocity -= 0.035; 
+                    if (playerGroup.position.y <= 0) {
+                        playerGroup.position.y = 0;
+                        state.isJumping = false;
+                    }
+                }
+            }
+            petGroup.position.x = playerGroup.position.x - 2; 
+
+            const moveAmt = state.speed * dt;
+            if (moveAmt > 0) {
+                state.distance += moveAmt;
+
+                envObjects.forEach(obj => {
+                    obj.chunk.position.z += moveAmt;
+                    if(obj.chunk.position.z > 20) {
+                        obj.chunk.position.z -= 200;
+                    }
+                });
+
+                for(let i = obstacles.length-1; i >= 0; i--) {
+                    let obs = obstacles[i];
+                    obs.position.z += moveAmt;
+                    
+                    if (obs.position.z > -1.5 && obs.position.z < 1.5) {
+                        if (Math.abs(obs.position.x - playerGroup.position.x) < 1.0 && playerGroup.position.y < (obs.userData.hitHeight || 1.5)) {
+                            scene.remove(obs);
+                            obstacles.splice(i, 1);
+                            state.lives--;
+                            animateHUD('hud-lives');
+                            updateHUD();
+                            
+                            playerGroup.children[0].material.color.setHex(0xff0000);
+                            setTimeout(() => { if(state.avatar==='boy') playerGroup.children[0].material.color.setHex(0x3b82f6); else playerGroup.children[0].material.color.setHex(0xf472b6); }, 200);
+
+                            if(state.lives <= 0) showResults();
+                            continue;
+                        }
+                    }
+                    if(obs.position.z > 5) { scene.remove(obs); obstacles.splice(i, 1); }
+                }
+
+                for(let i = coins.length-1; i >= 0; i--) {
+                    let coin = coins[i];
+                    coin.position.z += moveAmt;
+                    coin.rotation.z += dt * 5;
+                    
+                    if (Math.abs(coin.position.z) < 1.5 && Math.abs(coin.position.x - playerGroup.position.x) < 1.0) {
+                        if (Math.abs(coin.position.y - (playerGroup.position.y + 0.6)) < 1.5) {
+                            scene.remove(coin);
+                            coins.splice(i, 1);
+                            state.coins++;
+                            animateHUD('hud-coins');
+                            updateHUD();
+                            playCoinSound();
+                            continue;
+                        }
+                    }
+                    if(coin.position.z > 5) { scene.remove(coin); coins.splice(i, 1); }
+                }
+
+                if (gates.length > 0) {
+                    gates.forEach(g => g.position.z += moveAmt);
+                    
+                    if (state.mode === 'APPROACHING_QUESTION' && gates[0].position.z > -7) {
+                        triggerQuestionPause();
+                    }
+                    
+                    if (state.mode === 'ANSWER_RUN' && gates[0].position.z > 0) {
+                        let hitGate = gates.find(g => Math.abs(g.position.x - playerGroup.position.x) < 1.5);
+                        if (hitGate) {
+                            checkGateCollision(hitGate.children.find(c => c.geometry.type === 'PlaneGeometry'));
+                        } else {
+                            checkGateCollision(gates[state.targetLane].children.find(c => c.geometry.type === 'PlaneGeometry')); 
+                        }
+                    }
+                }
+
+                spawnTimer += dt;
+                if (spawnTimer > 0.65) { // Increased from 0.35 to reduce obstacle density
+                    spawnTimer = 0;
+                    if (state.mode === 'RUN') {
+                        // Prevent obstacles from spawning too close to the questions to naturally clear the path
+                        if (state.nextQuestionDist - state.distance < 60) {
+                            spawnCoin(); // Only spawn coins to keep the path clear
+                            if (Math.random() > 0.5) spawnCoin(); // Extra coins!
+                        } else {
+                            // 70% chance to spawn an obstacle, otherwise just spawn coins
+                            if (Math.random() > 0.3) {
+                                spawnObstacle();
+                            } else {
+                                spawnCoin();
+                            }
+                            if (Math.random() > 0.4) spawnCoin(); // Frequently add coins too
+                        }
+                    }
+                }
+
+                if (state.mode === 'RUN' && state.distance > state.nextQuestionDist) {
+                    spawnGates();
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        buildCharacter('boy');
+        animate();
+
+    </script>
+</body>
+</html>
